@@ -3,6 +3,7 @@ using System.Threading;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
+using Wabbajack.Common;
 
 namespace HalgarisRPGLoot
 {
@@ -10,6 +11,8 @@ namespace HalgarisRPGLoot
     {
         static int Main(string[] args)
         {
+            var configs = "config.json".RelativeTo(AbsolutePath.EntryPoint).FromJson<GlobalConfiguration>();
+            
             return SynthesisPipeline.Instance.Patch<ISkyrimMod, ISkyrimModGetter>(
                 args: args,
                 patcher: RunPatch,

@@ -11,6 +11,13 @@
       <PackageReference Include="Mutagen.Bethesda.FormKeys.SkyrimSE" Version="1.0.0" />
       <PackageReference Include="Mutagen.Bethesda.Skyrim" Version="0.20.0" />
       <PackageReference Include="Mutagen.Bethesda.Synthesis" Version="0.10.15" />
+      <PackageReference Include="Wabbajack.Common" Version="2.2.1.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Update="config.json">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
 </Project>

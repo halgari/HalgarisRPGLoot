@@ -1,0 +1,41 @@
+{
+
+  "WeaponConfiguration": {
+    "MinimalIconicLevel": 20,
+    "IconicEnchantments": 4,
+    "Rarities": [
+      {"Name": "Magical",
+        "NumberToGenerate": 1,
+        "Enchantments": 150},
+      {"Name": "Rare",
+        "NumberToGenerate": 2,
+        "Enchantments": 40},
+      {"Name": "Epic",
+        "NumberToGenerate": 3,
+        "Enchantments": 15},
+      {"Name": "Legendary",
+        "NumberToGenerate": 4,
+        "Enchantments": 2}
+    ]
+  },
+
+  "ArmorConfiguration": {
+    "MinimalIconicLevel": 20,
+    "IconicEnchantments": 4,
+    "Rarities": [
+      {"Name": "Magical",
+        "NumberToGenerate": 1,
+        "Enchantments": 150},
+      {"Name": "Rare",
+        "NumberToGenerate": 2,
+        "Enchantments": 40},
+      {"Name": "Epic",
+        "NumberToGenerate": 3,
+        "Enchantments": 15},
+      {"Name": "Legendary",
+        "NumberToGenerate": 4,
+        "Enchantments": 2},
+
+     ]
+    }
+}
