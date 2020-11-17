@@ -37,10 +37,12 @@ namespace HalgarisRPGLoot
         public (short Key, ResolvedEnchantment[])[] ByLevel { get; set; }
         
         public Dictionary<FormKey, IObjectEffectGetter> AllObjectEffects { get; set; }
-
-
-
         
+        public Dictionary<FormKey, IGrouping<FormKey, ResolvedListItem<IWeapon, IWeaponGetter>>> AllUnenchantedItemsByFormKey { get; set; }
+        
+        public (INpcGetter npc, IContainerEntryGetter itm, IGrouping<FormKey, ResolvedListItem<IWeapon, IWeaponGetter>>, int Index)[] UniqueWeapons { get; set; }
+        public INpcGetter[] UniqueNPCs { get; set; }
+       
         public WeaponAnalyzer(SynthesisState<ISkyrimMod, ISkyrimModGetter> state)
         {
             State = state;
@@ -75,6 +77,10 @@ namespace HalgarisRPGLoot
             
             AllUnenchantedItems = AllListItems.Where(e => e.Resolved.ObjectEffect.IsNull).ToArray();
 
+            AllUnenchantedItemsByFormKey =
+                AllUnenchantedItems.GroupBy(d => d.Resolved.FormKey)
+                    .ToDictionary(e => e.Key);
+
             AllEnchantedItems = AllListItems.Where(e => !e.Resolved.ObjectEffect.IsNull).ToArray();
 
             AllObjectEffects = State.LoadOrder.PriorityOrder.ObjectEffect().WinningOverrides()
@@ -107,6 +113,16 @@ namespace HalgarisRPGLoot
             ByLevelIndexed = Enumerable.Range(0, 100)
                 .Select(lvl => (lvl, ByLevel.Where(bl => bl.Key <= lvl).SelectMany(e => e.Item2).ToArray()))
                 .ToDictionary(kv => kv.lvl, kv => kv.Item2);
+            
+            UniqueNPCs = State.LoadOrder.PriorityOrder.Npc().WinningOverrides()
+                .Where(npc => npc.Items != null)
+                .Where(npc => (npc.Configuration.Flags & NpcConfiguration.Flag.Unique) != 0)
+                .ToArray();
+
+            UniqueWeapons = UniqueNPCs.SelectMany(npc => npc.Items
+                .Where(itm => AllUnenchantedItemsByFormKey.ContainsKey(itm.Item.Item.FormKey))
+                .Select((itm, idx) => (npc, itm, AllUnenchantedItemsByFormKey[itm.Item.Item.FormKey], idx)))
+                .ToArray();
         }
 
 
@@ -180,8 +196,25 @@ namespace HalgarisRPGLoot
                     }
                 }
             }
+
+            GenerateIconics();
         }
-        private FormKey GenerateEnchantment(
+
+        private void GenerateIconics()
+        {
+            Console.WriteLine($"Generating {UniqueWeapons.Length} iconic weapons");
+            foreach (var (npc, item, resolved, index) in UniqueWeapons)
+            {
+                Console.WriteLine($"Generating {npc.Name}'s {MakeName(resolved.First().Resolved.EditorID)}");
+                var generated = GenerateEnchantment(resolved.First(), "Iconic", 4);
+                generated.Name = $"{npc.Name}'s {MakeName(resolved.First().Resolved.EditorID)}";
+                var nnpc = State.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                var entry = nnpc.Items.Skip(index).First();
+                entry.Item.Item = generated.FormKey;
+            }
+        }
+
+        private Weapon GenerateEnchantment(
             ResolvedListItem<IWeapon, IWeaponGetter> item,
             string rarityName, int rarityEnchCount)
         {
@@ -217,7 +250,7 @@ namespace HalgarisRPGLoot
             
 
 
-            return nitm.FormKey;
+            return nitm;
         }
         
         private static char[] Numbers = "123456890".ToCharArray();

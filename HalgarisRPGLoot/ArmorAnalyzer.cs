@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using DynamicData;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.FormKeys.SkyrimSE;
 using Mutagen.Bethesda.Skyrim;
@@ -40,6 +41,9 @@ namespace HalgarisRPGLoot
         
         public (short Key, ResolvedEnchantment[])[] ByLevel { get; set; }
         
+        public INpcGetter[] UniqueNPCs { get; set; }
+        
+        public Dictionary<FormKey, IOutfitGetter> AllOutfits { get; set; }
         
         public ArmorAnalyzer(SynthesisState<ISkyrimMod, ISkyrimModGetter> state)
         {
@@ -73,6 +77,7 @@ namespace HalgarisRPGLoot
                 .ToArray();
             
             AllUnenchantedItems = AllListItems.Where(e => e.Resolved.ObjectEffect.IsNull).ToArray();
+            AllUnenchantedItemsIndexed = AllUnenchantedItems.GroupBy(itm => itm.Resolved.FormKey).ToDictionary(itm => itm.Key);
             
             AllEnchantedItems = AllListItems.Where(e => !e.Resolved.ObjectEffect.IsNull).ToArray();
 
@@ -107,8 +112,25 @@ namespace HalgarisRPGLoot
             ByLevelIndexed = Enumerable.Range(0, 100)
                 .Select(lvl => (lvl, ByLevel.Where(bl => bl.Key <= lvl).SelectMany(e => e.Item2).ToArray()))
                 .ToDictionary(kv => kv.lvl, kv => kv.Item2);
+            
+            UniqueNPCs = State.LoadOrder.PriorityOrder.Npc().WinningOverrides()
+                .Where(npc => npc.Items != null)
+                .Where(npc => (npc.Configuration.Flags & NpcConfiguration.Flag.Unique) != 0)
+                .ToArray();
+
+            AllOutfits = State.LoadOrder.PriorityOrder.Outfit().WinningOverrides().ToDictionary(outfit => outfit.FormKey);
+            AllOutiftsWithArmors = AllOutfits.Values
+                .Where(o => o.Items != null)
+                .SelectMany(outfit => outfit.Items!.Select((item, index) => (outfit, item, index)).ToArray())
+                .Where(row => AllUnenchantedItemsIndexed.ContainsKey(row.item.FormKey))
+                .Select(row => (row.outfit, row.item, AllUnenchantedItemsIndexed[row.item.FormKey], row.index))
+                .GroupBy(row => row.outfit!.FormKey)
+                .ToDictionary(row => row.Key);
         }
 
+        public Dictionary<FormKey, IGrouping<FormKey, ResolvedListItem<IArmor, IArmorGetter>>> AllUnenchantedItemsIndexed { get; set; }
+
+        public Dictionary<FormKey, IGrouping<FormKey, (IOutfitGetter Outfit, IFormLink<IOutfitTargetGetter> Item, IGrouping<FormKey, ResolvedListItem<IArmor, IArmorGetter>> Resolved, int Index)>> AllOutiftsWithArmors { get; set; }
 
 
         public void Report()
@@ -175,13 +197,49 @@ namespace HalgarisRPGLoot
                     entry.Data!.Reference = lst.FormKey;
                 }
             }
+
+            GenerateIconic();
         }
-        private FormKey GenerateEnchantment(
-            ResolvedListItem<IArmor, IArmorGetter> item,
-            string rarityName, int rarityEnchCount)
+
+        private void GenerateIconic()
         {
-            var level = item.Entry.Data.Level;
-            var forLevel = ByLevelIndexed[level];
+            foreach (var npc in UniqueNPCs)
+            {
+                if ((npc.Name?.ToString() ?? "") == "")
+                    continue;
+                if (!AllOutiftsWithArmors.TryGetValue(npc.DefaultOutfit.FormKey ?? FormKey.Null, out var outfit))
+                {
+                    continue;
+                }
+
+                var newOutfitKey = State.PatchMod.GetNextFormKey();
+                var newOutfit = State.PatchMod.Outfits.AddNew(newOutfitKey);
+                newOutfit.DeepCopyIn(outfit.First().Outfit);
+                newOutfit.EditorID = "HAL_ICONIC" + outfit.First().Outfit.EditorID + "_" + npc.FormKey.ID;
+
+                foreach (var item in outfit)
+                {
+                    var newItem = item.Resolved.First();
+                    var generated = GenerateEnchantment(newItem, "Iconic", 4);
+                    generated.Name = MakeName(newItem.Resolved.EditorID, newItem.Resolved.Name);
+                    newOutfit.Items![item.Index] = new FormLink<IOutfitTargetGetter>(generated.FormKey);
+                }
+
+                var copied = State.PatchMod.Npcs.GetOrAddAsOverride(npc);
+                copied.DefaultOutfit = newOutfit;
+                
+                
+                Console.WriteLine($"Generating unique clothing for {npc.Name}");
+            }
+        }
+
+        private Armor GenerateEnchantment(
+            ResolvedListItem<IArmor, IArmorGetter> item,
+            string rarityName, int rarityEnchCount, int? level = null)
+        {
+            
+            level ??= item.Entry.Data!.Level;
+            var forLevel = ByLevelIndexed[(int) level];
             var effects = Extensions.Repeatedly(() => forLevel.RandomItem())
                 .Distinct()
                 .Take(rarityEnchCount)
@@ -211,14 +269,17 @@ namespace HalgarisRPGLoot
 
 
 
-            return nitm.FormKey;
+            return nitm;
         }
 
         private static char[] Numbers = "123456890".ToCharArray();
         private static Regex Splitter = new Regex("(?<=[A-Z])(?=[A-Z][a-z])|(?<=[^A-Z])(?=[A-Z])|(?<=[A-Za-z])(?=[^A-Za-z])");
         private Dictionary<string, string> KnownMapping = new Dictionary<string, string>();
-        private string MakeName(string? resolvedEditorId)
+        private string MakeName(string? resolvedEditorId, ITranslatedStringGetter? translatedStringGetter = null)
         {
+            if (translatedStringGetter != null && translatedStringGetter.ToString() != "")
+                return translatedStringGetter.ToString();
+                 
             string returning;
             if (resolvedEditorId == null)
             {
